@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keybinds Example</title>
+    <style type="text/css">
+        td { padding: 10px; }
+    </style>
+    <script src="src/keybinds.js"></script>
+</head>
+<body>
+    <h1>Keybinds Example</h1>
+    <p>Here are some keybinds...</p>
+    <table>
+        <tr>
+            <td>Ctrl + S</td>
+            <td>Save</td>
+        </tr>
+        <tr>
+            <td>Alt + R</td>
+            <td>Run simulation</td>
+        </tr>
+        <tr>
+            <td>Ctrl + C</td>
+            <td>Stop simulation</td>
+        </tr>
+    </table>
+    <hr>
+
+    <script type="text/javascript">
+        var hasSaveToolTipBeenShown = false;
+
+        keybinds.set('s', {
+            ctrl: true,
+            preventDefault: true,
+            action: function () {
+                writeLine('Ok, saved those things you wanted.');
+
+                if (!hasSaveToolTipBeenShown) {
+                    writeLine('Note: we are using `preventDefault: true` here to keep the browser from opening the save file dialog box.')
+                    hasSaveToolTipBeenShown = true;
+                }
+            }
+        });
+
+        var isSimulating = false;
+
+        keybinds.set('r', {
+            alt: true,
+            action: function () {
+                if (isSimulating)
+                    writeLine('... Still simulating, please be patient.')
+                else {
+                    writeLine('Running very long simulation, please wait...');
+                    isSimulating = true;
+                }
+            }
+        });
+
+        keybinds.set('c', {
+            ctrl: true,
+            action: function () {
+                if (isSimulating) {
+                    writeLine('Simulation stopped. We\'ll never know the results...');
+                    isSimulating = false;
+                }
+                else
+                    writeLine('Nothing to stop')
+            }
+        });
+
+        //
+
+        function writeLine(text) {
+            document.body.appendChild(document.createElement('p')).textContent = text;
+        }
+    </script>
+</body>
+</html>
