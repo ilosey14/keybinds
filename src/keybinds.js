@@ -15,102 +15,118 @@ const keybinds = {};
  * @property {boolean} stopPropagation
  */
 
-
 /**
  * Key bind object constructor.
  * @constructor
  * @param {BindOptions} options
  */
 keybinds.Bind = function (options) {
-    if (typeof options.action !== 'function')
-        throw 'BindOptions.action must be a function, "' + (typeof options.action) + '" given.';
+	if (typeof options.key !== 'string')
+		throw `[keybinds.Bind] BindOptions.key must be a string, "${typeof options.key}" given.`;
+	if (typeof options.action !== 'function')
+		throw `[keybinds.Bind] BindOptions.action must be a function, "${options.action}" given.`;
 
-    this.id = keybinds.index++;
+	this.id = keybinds.index++;
 
-    this.key = options.key;
-    this.action = options.action;
+	this.key = options.key;
+	this.action = options.action;
 
-    this.ctrl = options.ctrl || false;
-    this.shift = options.shift || false;
-    this.alt = options.alt || false;
+	this.ctrl = options.ctrl || false;
+	this.shift = options.shift || false;
+	this.alt = options.alt || false;
 
-    this.preventDefault = options.preventDefault;
-    this.stopPropagation = options.stopPropagation;
+	this.isEnabled = true;
+	this.preventDefault = options.preventDefault;
+	this.stopPropagation = options.stopPropagation;
 };
-
-keybinds.Bind.prototype.isEnabled = true;
 
 keybinds.binds = {};
 keybinds.index = 0;
 
 /**
- * Sets a new or overwrites an existing keybind
+ * Sets a new or overwrites an existing keybind.
  * @param {string} key
- * @param {BindOptions} options
+ * @param {BindOptions|function} options
  */
 keybinds.set = function (key, options) {
-    var bind = new this.Bind(Object.assign(options, { key: key }));
+	if (typeof options === 'function')
+		options = { action: options };
 
-    if (this.binds[key])
-        this.binds[key].push(bind);
-    else
-        this.binds[key] = [ bind ];
+	var bind = new this.Bind(Object.assign({}, options, { key: key }));
 
-    return bind;
+	if (key.length === 1)
+		key = key.toLowerCase();
+
+	if (key in this.binds) {
+		this.binds[key].push(bind);
+
+		if (key.length === 1)
+			this.binds[key.toUpperCase()].push(bind);
+	}
+	else {
+		this.binds[key] = [ bind ];
+
+		if (key.length === 1)
+			this.binds[key.toUpperCase()] = [ bind ];
+	}
+
+	return bind;
 };
 
 /**
- * Removes a key bind
- * @param {Bind} bind
+ * Removes a key bind.
+ * @param {keybinds.Bind} bind
  * @returns {boolean} Whether the bind was removed successfully
  */
 keybinds.remove = function (bind) {
-    var binds = this.binds[bind.key];
+	var binds = (bind.key.length === 1)
+		? [...this.binds[bind.key.toLowerCase()], ...this.binds[bind.key.toUpperCase]]
+		: this.binds[bind.key];
 
-    if (!binds) return false;
+	if (!binds || !binds.length) return false;
 
-    // for each binding on this key
-    for (let i = 0; i < binds.length; i++) {
-        if (binds[i].id === bind.id) {
-            this.binds[bind.key].splice(i, 1);
-            return true;
-        }
-    }
+	// for each binding on this key
+	var removed = 0;
 
-    return false;
-}
+	for (let i = 0; i < binds.length; i++) {
+		if (binds[i].id === bind.id) {
+			this.binds[bind.key].splice(i, 1);
+			removed++;
+		}
+	}
+
+	return (removed > 0);
+};
 
 /**
- * Invokes a defined keybind from a keyboard event
+ * Invokes a defined keybind from a keyboard event.
  * @param {KeyboardEvent} e
  */
 keybinds.invoke = function (e) {
-    var key = e.key;
+	if (!(e.key in this.binds))
+		throw `[keybinds.invoke] Undefined keybind for key "${e.key}".`;
 
-    if (!this.binds[key])
-        throw 'Error: undefined keybind for key "' + key + '"';
+	for (let bind of this.binds[e.key]) {
+		if (!bind.isEnabled) continue;
 
-    for (let bind of this.binds[key]) {
-        if (!bind.isEnabled) continue;
+		if (e.ctrlKey === bind.ctrl &&
+			e.shiftKey === bind.shift &&
+			e.altKey === bind.alt)
+		{
+			bind.action(e);
 
-        if (e.ctrlKey === bind.ctrl &&
-            e.shiftKey === bind.shift &&
-            e.altKey === bind.alt)
-        {
-            bind.action(e);
+			if (bind.preventDefault)
+				e.preventDefault();
 
-            if (bind.preventDefault)
-                e.preventDefault();
+			if (bind.stopPropagation)
+				e.stopPropagation();
 
-            if (bind.stopPropagation)
-                e.stopPropagation();
-
-            // continue looping
-        }
-    }
+			// continue looping
+		}
+	}
 };
 
 // Attach the event listener
 window.addEventListener('keydown', function (e) {
-    if (keybinds.binds[e.key]) keybinds.invoke(e);
+	if (e.key in keybinds.binds) keybinds.invoke(e);
 });
