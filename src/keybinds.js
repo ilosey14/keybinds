@@ -40,6 +40,13 @@ keybinds.Bind = function (options) {
 	this.stopPropagation = options.stopPropagation;
 };
 
+/**
+ * Removes this keybind.
+ */
+keybinds.Bind.prototype.remove = function () {
+	keybinds.remove(this);
+};
+
 keybinds.binds = {};
 keybinds.index = 0;
 
@@ -69,6 +76,28 @@ keybinds.set = function (key, options) {
 		if (key.length === 1)
 			this.binds[key.toUpperCase()] = [ bind ];
 	}
+
+	return bind;
+};
+
+/**
+ * Sets anew or overwrites an existing keybind.
+ * @param {string} key
+ * @param {BindOptions|function} options
+ */
+keybinds.setOnce = function (key, options) {
+	var bind = this.set(key, options);
+
+	bind.action = () => {
+		// run action
+		if (typeof options === 'function')
+			options();
+		else if (typeof options.action === 'function')
+			options.action();
+
+		// remove bind
+		keybinds.remove(bind);
+	};
 
 	return bind;
 };
