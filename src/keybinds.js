@@ -13,6 +13,8 @@ const keybinds = {};
  * @property {boolean} alt
  * @property {boolean} preventDefault
  * @property {boolean} stopPropagation
+ * @property {boolean} isEnabled
+ * @property {EventTarget} target
  */
 
 /**
@@ -30,15 +32,16 @@ keybinds.Bind = function (options) {
 
 	this.key = options.key;
 	this.action = options.action;
+	this.target = options.target;
 
 	this.ctrl = options.ctrl || false;
 	this.shift = options.shift || false;
 	this.alt = options.alt || false;
 
-	this.isEnabled = true;
+	this.isEnabled = (options.isEnabled === undefined) || options.isEnabled;
 	this.preventDefault = options.preventDefault;
 	this.stopPropagation = options.stopPropagation;
-};
+ };
 
 /**
  * Removes this keybind.
@@ -48,6 +51,7 @@ keybinds.Bind.prototype.remove = function () {
 };
 
 keybinds.binds = {};
+keybinds.targetBinds = {};
 keybinds.index = 0;
 
 /**
@@ -56,32 +60,45 @@ keybinds.index = 0;
  * @param {BindOptions|function} options
  */
 keybinds.set = function (key, options) {
-	if (typeof options === 'function')
-		options = { action: options };
+	let bindOptions = Object.assign({ key }, (typeof options === 'function') ? { action: options } : options),
+		bind = new this.Bind(bindOptions),
+		binds;
 
-	var bind = new this.Bind(Object.assign({}, options, { key: key }));
+	// init target
+	if (bind.target) {
+		let id = bind.target.id || (bind.target.id = Math.random().toString(36).slice(2));
+
+		if (!(id in this.targetBinds)) {
+			this.targetBinds[id] = {};
+			this.attachListener(bind.target);
+		}
+
+		binds = this.targetBinds[id];
+	}
+	else
+		binds = this.binds;
 
 	if (key.length === 1)
 		key = key.toLowerCase();
 
-	if (key in this.binds) {
-		this.binds[key].push(bind);
+	if (key in binds) {
+		binds[key].push(bind);
 
 		if (key.length === 1)
-			this.binds[key.toUpperCase()].push(bind);
+			binds[key.toUpperCase()].push(bind);
 	}
 	else {
-		this.binds[key] = [ bind ];
+		binds[key] = [ bind ];
 
 		if (key.length === 1)
-			this.binds[key.toUpperCase()] = [ bind ];
+			binds[key.toUpperCase()] = [ bind ];
 	}
 
 	return bind;
 };
 
 /**
- * Sets anew or overwrites an existing keybind.
+ * Sets a new or overwrites an existing keybind.
  * @param {string} key
  * @param {BindOptions|function} options
  */
@@ -92,11 +109,11 @@ keybinds.setOnce = function (key, options) {
 		// run action
 		if (typeof options === 'function')
 			options();
-		else if (typeof options.action === 'function')
-			options.action();
+		else
+			options.action?.();
 
 		// remove bind
-		keybinds.remove(bind);
+		window.setTimeout(() => keybinds.remove(bind));
 	};
 
 	return bind;
@@ -109,7 +126,7 @@ keybinds.setOnce = function (key, options) {
  */
 keybinds.remove = function (bind) {
 	var binds = (bind.key.length === 1)
-		? [...this.binds[bind.key.toLowerCase()], ...this.binds[bind.key.toUpperCase]]
+		? [...this.binds[bind.key.toLowerCase()], ...this.binds[bind.key.toUpperCase()]]
 		: this.binds[bind.key];
 
 	if (!binds || !binds.length) return false;
@@ -130,12 +147,15 @@ keybinds.remove = function (bind) {
 /**
  * Invokes a defined keybind from a keyboard event.
  * @param {KeyboardEvent} e
+ * @param {Object<string,keybinds.Bind>} dict
  */
-keybinds.invoke = function (e) {
-	if (!(e.key in this.binds))
+keybinds.invoke = function (e, dict) {
+	if (!dict) dict = this.binds;
+
+	if (!(e.key in dict))
 		throw `[keybinds.invoke] Undefined keybind for key "${e.key}".`;
 
-	for (let bind of this.binds[e.key]) {
+	for (let bind of dict[e.key]) {
 		if (!bind.isEnabled) continue;
 
 		if (e.ctrlKey === bind.ctrl &&
@@ -153,6 +173,20 @@ keybinds.invoke = function (e) {
 			// continue looping
 		}
 	}
+};
+
+/**
+ * @param {EventTarget} target
+ */
+keybinds.attachListener = function (target) {
+	if (target.id === undefined)
+		target.id = Math.random().toString(36).slice(2);
+
+	target.addEventListener('keydown', function (e) {
+		let dict = keybinds.targetBinds[this.id];
+
+		if (e.key in dict) keybinds.invoke(e, dict);
+	});
 };
 
 // Attach the event listener
